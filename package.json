@@ -1,7 +1,7 @@
 {
   "name": "rivets",
   "description": "Declarative data binding + templating solution.",
-  "version": "0.9.0",
+  "version": "0.9.6",
   "author": "Michael Richards",
   "url": "http://rivetsjs.com",
   "main": "./dist/rivets.js",
@@ -21,7 +21,8 @@
   "scripts": {
     "test": "gulp spec",
     "build": "gulp build",
-    "bump": "gulp bump"
+    "bump": "gulp bump",
+    "upgrade": "npm run build && npm test && npm run bump && npm run build"
   },
   "devDependencies": {
     "mocha": "~1.20.1",

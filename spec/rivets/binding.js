@@ -35,16 +35,16 @@ describe('Rivets.Binding', function() {
       binding.formatters.should.be.eql(['awesome', 'radical', 'totally'])
     })
 
-    it('allows arguments with pipes', function() {
+    it('allows arguments with pipes', function () {
 
       valueInput = document.createElement('input')
-      valueInput.setAttribute('type','text')
-      valueInput.setAttribute('data-value', "obj.name | awesome | totally 'arg | with || pipes'")
+      valueInput.setAttribute('type', 'text')
+      valueInput.setAttribute('data-value', "obj.name | awesome | totally 'arg | with || pipes' 'and more args' | and 'others formatters' with 'pi||pes'")
 
-      view = rivets.bind(valueInput, {obj: { name: 'nothing' }})
+      view = rivets.bind(valueInput, { obj: { name: 'nothing' } })
       binding = view.bindings[0]
 
-      binding.formatters.should.be.eql(['awesome', "totally 'arg | with || pipes'"])
+      binding.formatters.should.be.eql(['awesome', "totally 'arg | with || pipes' 'and more args'", "and 'others formatters' with 'pi||pes'"])
     })
   })
 
@@ -152,7 +152,35 @@ describe('Rivets.Binding', function() {
       })
     })
   })
+  
+  describe('prototype functions', function() {
+    it('does call routine if observed value is a function', function() {
+      rivets.configure({
+        executeFunctions:true
+      })
+      var Employee = function(name) {
+        this.name = name
+      }
+      Employee.prototype.getName = function() {
+        return this.name;
+      }
+      var model = {employee: new Employee("John")}
 
+      el = document.createElement('div')
+      el.setAttribute('data-text', 'employee.getName')
+
+      view = rivets.bind(el, model)
+      binding = view.bindings[0]
+
+      sinon.spy(binding.binder, 'routine')
+      model.employee = new Employee("Peter")
+      binding.binder.routine.calledWith(el, "Peter").should.be.true
+      // Back to default !!
+      rivets.configure({
+        executeFunctions:false
+      })
+    })
+  })
   describe('publish()', function() {
     it("should publish the value of a number input", function() {
       numberInput = document.createElement('input')
@@ -225,6 +253,93 @@ describe('Rivets.Binding', function() {
       binding.binder.routine.calledWith(valueInput, 'fred is awesome').should.be.true
     })
 
+    it("should resolve formatter arguments to their values", function() {
+      rivets.formatters.withArguments = {
+        publish: function(value, arg1, arg2) {
+          return value + ':' + arg1 + ':' + arg2
+        },
+        read: function(value, arg1, arg2) {
+          return value.replace(':' + arg1 + ':' + arg2, '')
+        }
+      }
+
+      valueInput = document.createElement('input')
+      valueInput.setAttribute('type', 'text')
+      valueInput.setAttribute('data-value', "obj.name | withArguments config.age 'male'")
+
+      view = rivets.bind(valueInput, {
+        obj: {
+          name: 'nothing'
+        },
+        config: {
+          age: 50
+        }
+      })
+
+      binding = view.bindings[0]
+      model = binding.model
+
+      valueInput.value = 'bobby'
+      binding.publish({target: valueInput})
+      adapter.set.calledWith(model, 'name', 'bobby:50:male').should.be.true
+
+      valueInput.value.should.equal('bobby')
+
+      binding.set('andy:50:male')
+      binding.binder.routine.calledWith(valueInput, 'andy').should.be.true
+    })
+
+    it("should resolve formatter arguments correctly with multiple formatters", function() {
+      rivets.formatters.wrap = {
+        publish: function(value, arg1, arg2) {
+          return arg1 + value + arg2
+        },
+        read: function(value, arg1, arg2) {
+          return value.replace(arg1, '').replace(arg2, '')
+        }
+      }
+
+      rivets.formatters.saveAsCase = {
+        publish: function(value, typeCase) {
+          return value['to' + typeCase + 'Case']()
+        },
+        read: function(value, typeCase) {
+          return value[typeCase === 'Upper' ? 'toLowerCase' : 'toUpperCase']()
+        }
+      }
+
+      valueInput = document.createElement('input')
+      valueInput.setAttribute('type', 'text')
+      valueInput.setAttribute(
+        'data-value',
+        "obj.name | saveAsCase config.typeCase | wrap config.curly '}' | wrap config.square ']' | wrap config.paren ')'"
+      )
+
+      view = rivets.bind(valueInput, {
+        obj: {
+          name: 'nothing'
+        },
+        config: {
+          paren: '(',
+          square: '[',
+          curly: '{',
+          typeCase: 'Upper'
+        }
+      })
+
+      binding = view.bindings[0]
+      model = binding.model
+
+      valueInput.value = 'bobby'
+      binding.publish({target: valueInput})
+      adapter.set.calledWith(model, 'name', '{[(BOBBY)]}').should.be.true
+
+      valueInput.value.should.equal('bobby')
+
+      binding.set('{[(ANDY)]}')
+      binding.binder.routine.calledWith(valueInput, 'andy').should.be.true
+    })
+
     it("should not fail or format if the specified binding function doesn't exist", function() {
       rivets.formatters.awesome = { }
       valueInput = document.createElement('input')
@@ -243,7 +358,7 @@ describe('Rivets.Binding', function() {
       binding.binder.routine.calledWith(valueInput, 'fred').should.be.true
     })
 
-    it("should apply read binders left to right, and write binders right to left", function() {
+    it("should apply read binders left to right, and publish binders right to left", function() {
       rivets.formatters.totally = {
         publish: function(value) { return value + ' totally' },
         read: function(value) { return value + ' totally' }
